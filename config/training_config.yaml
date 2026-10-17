@@ -1,0 +1,9 @@
+# مدل هرس شده و مخصوص زبان فارسی
+base_model: "alphaedge-ai/Qwen3-1.7B-fas-32768"
+
+# تنظیمات مخصوص گوشی و گیت‌هاب (مصرف رم پایین)
+max_length: 512
+batch_size: 1
+gradient_accumulation: 8
+learning_rate: 2e-4
+epochs: 3
