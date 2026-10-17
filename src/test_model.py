@@ -5,7 +5,8 @@ from peft import PeftModel
 
 def main():
     base_model_name = "alphaedge-ai/Qwen3-1.7B-fas-32768"
-    adapter_path = os.path.abspath("models/lora_adapter")
+    # 🟢 استفاده از مسیر نسبی به جای مسیر مطلق برای رفع باگ
+    adapter_path = "models/lora_adapter"
     
     print(f"--- Loading Base Model: {base_model_name} ---")
     tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
@@ -22,8 +23,13 @@ def main():
     # بررسی وجود آداپتور
     if os.path.exists(os.path.join(adapter_path, "adapter_config.json")):
         print("--- Loading LoRA Adapter ---")
-        # لود کردن آداپتور به روش امن (بدون خطای Repo id)
-        model = PeftModel.from_pretrained(model, adapter_path, local_files_only=True)
+        try:
+            # استفاده از مسیر نسبی
+            model = PeftModel.from_pretrained(model, adapter_path, local_files_only=True)
+            print("✅ Adapter loaded successfully.")
+        except Exception as e:
+            print(f"⚠️ Error loading adapter: {e}")
+            print("Testing base model only.")
     else:
         print("⚠️ No adapter found! Testing base model only.")
 
