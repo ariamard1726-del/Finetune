@@ -14,7 +14,7 @@ permissions:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 350 # حداکثر زمان 5 ساعت و 50 دقیقه
+    timeout-minutes: 350 
     
     steps:
     - name: Checkout repository
@@ -37,6 +37,16 @@ jobs:
       run: |
         python src/train.py
         
+    # 🛡️ مرحله جدید: بررسی وجود فایل مدل قبل از حذف داده
+    - name: Verify Model was Saved
+      run: |
+        if [ -f "models/lora_adapter/adapter_model.safetensors" ] || [ -f "models/lora_adapter/adapter_model.bin" ]; then
+          echo "✅ Model file exists. Safe to delete data chunk."
+        else
+          echo "❌ ERROR: Model weights were NOT saved! Aborting to prevent data loss."
+          exit 1
+        fi
+
     - name: Remove Trained Chunk
       run: |
         FIRST_CHUNK=$(ls data/shards/legal_chunk_*.jsonl | sort -V | head -n 1)
