@@ -1,6 +1,7 @@
 import os
 import yaml
 import torch
+import shutil
 from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
@@ -16,7 +17,6 @@ def load_config(config_path):
         return yaml.safe_load(f)
 
 def main():
-    # --- بررسی فعال بودن توکن Hugging Face ---
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
         print("✅ SUCCESS: HF_TOKEN is successfully loaded from GitHub Secrets!")
@@ -25,21 +25,18 @@ def main():
     print("-" * 50)
 
     config = load_config("config/training_config.yaml")
-    
     print(f"--- Loading model: {config['base_model']} ---")
     
     tokenizer = AutoTokenizer.from_pretrained(config['base_model'], trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # لود مدل روی CPU
     model = AutoModelForCausalLM.from_pretrained(
         config['base_model'],
         torch_dtype=torch.float32,
         device_map="cpu",
         trust_remote_code=True
     )
-    
     model.config.use_cache = False
 
     peft_config = LoraConfig(
@@ -62,7 +59,6 @@ def main():
     tokenized_datasets = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
-    # تنظیمات بهینه برای CPU
     training_args = TrainingArguments(
         output_dir="./models/lora_adapter",
         per_device_train_batch_size=1,
@@ -84,12 +80,18 @@ def main():
         data_collator=data_collator,
     )
 
-    print("--- Starting Fine-Tuning on CPU (Should be fast now) ---")
+    print("--- Starting Fine-Tuning on CPU ---")
     trainer.train()
     
     print("--- Saving LoRA Adapters ---")
     model.save_pretrained("./models/lora_adapter")
     tokenizer.save_pretrained("./models/lora_adapter")
+    
+    # پاک کردن پوشه‌های checkpoint
+    for item in os.listdir("./models/lora_adapter"):
+        if item.startswith("checkpoint"):
+            shutil.rmtree(os.path.join("./models/lora_adapter", item))
+            
     print("Done!")
 
 if __name__ == "__main__":

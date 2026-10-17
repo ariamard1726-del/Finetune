@@ -6,7 +6,10 @@ on:
       - main
     paths:
       - 'data/shards/**'
-  workflow_dispatch: # این خط اجازه می‌دهد اکشن را دستی هم اجرا کنید
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   train:
@@ -29,7 +32,7 @@ jobs:
 
     - name: Run Training
       env:
-        HF_TOKEN: ${{ secrets.HF_TOKEN }} # اینجا توکن به عنوان متغیر محیطی به پایتون داده می‌شود
+        HF_TOKEN: ${{ secrets.HF_TOKEN }} 
       run: |
         python src/train.py
         
@@ -37,4 +40,4 @@ jobs:
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: "Auto: Update fine-tuned LoRA weights"
-        file_pattern: 'models/lora_adapter/*'
+        file_pattern: 'models/lora_adapter/*.safetensors models/lora_adapter/*.json models/lora_adapter/*.jinja'
