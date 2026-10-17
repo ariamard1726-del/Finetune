@@ -33,7 +33,8 @@ def main():
     model.config.use_cache = False
     model.gradient_checkpointing_enable()
 
-    adapter_path = os.path.abspath("models/lora_adapter")
+    # 🟢 اصلاح اصلی: استفاده از مسیر نسبی (بدون abspath)
+    adapter_path = "models/lora_adapter" 
     config_file = os.path.join(adapter_path, "adapter_config.json")
 
     peft_config = LoraConfig(
@@ -41,17 +42,15 @@ def main():
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]
     )
 
-    # 🟢 اصلاح مهم: بررسی دقیق‌تر برای لود کردن فایل لوکال
     if os.path.exists(config_file):
         try:
             print("--- 🔄 Loading previous LoRA weights ---")
-            # استفاده از load_adapter به جای from_pretrained برای جلوگیری از خطای Repo id
-            model = get_peft_model(model, peft_config)
-            model.load_adapter(adapter_path, adapter_name="default", is_trainable=True)
+            # اضافه کردن local_files_only برای جلوگیری از خطای Repo id
+            model = PeftModel.from_pretrained(model, adapter_path, is_trainable=True, local_files_only=True)
             print("✅ Successfully loaded previous weights.")
         except Exception as e:
             print(f"⚠️ Error loading LoRA ({e}). Starting fresh.")
-            # اگر خطا داد، مدل از قبل با get_peft_model آماده است
+            model = get_peft_model(model, peft_config)
     else:
         print("--- 🌱 Starting fresh LoRA training ---")
         model = get_peft_model(model, peft_config)
@@ -63,6 +62,7 @@ def main():
     tokenized_datasets = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
+    # 🟢 حذف پارامتر اشتباه remove_columns از اینجا
     training_args = TrainingArguments(
         output_dir=adapter_path,
         per_device_train_batch_size=1,
@@ -76,7 +76,6 @@ def main():
         bf16=False, 
         use_cpu=True, 
         report_to="none", 
-        remove_columns=False if hasattr(TrainingArguments, 'remove_columns') else None,
         remove_unused_columns=False
     )
 
