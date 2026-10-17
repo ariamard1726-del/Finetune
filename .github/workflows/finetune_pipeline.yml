@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'data/shards/**' # فقط وقتی داده‌های تکه‌تکه شده تغییر کردند اجرا شود
-  workflow_dispatch: # امکان اجرای دستی از تب Actions
+      - 'data/shards/**'
+  workflow_dispatch:
 
 jobs:
   train:
@@ -28,6 +28,8 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run Training
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }} # <--- این خط توکن را فعال می‌کند
       run: |
         python src/train.py
         
