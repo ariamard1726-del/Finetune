@@ -14,6 +14,7 @@ permissions:
 jobs:
   train:
     runs-on: ubuntu-latest
+    timeout-minutes: 350 # حداکثر زمان 5 ساعت و 50 دقیقه
     
     steps:
     - name: Checkout repository
@@ -36,9 +37,16 @@ jobs:
       run: |
         python src/train.py
         
-    - name: Commit and Push LoRA Adapters
+    - name: Remove Trained Chunk
+      run: |
+        FIRST_CHUNK=$(ls data/shards/legal_chunk_*.jsonl | sort -V | head -n 1)
+        if [ -n "$FIRST_CHUNK" ]; then
+          rm "$FIRST_CHUNK"
+          echo "✅ Deleted trained chunk: $FIRST_CHUNK"
+        fi
+        
+    - name: Commit and Push Updates
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
-        commit_message: "Auto: Update fine-tuned LoRA weights"
-        # تغییر مهم: حالا همه فایل‌های داخل پوشه را پوش می‌کند
-        file_pattern: 'models/lora_adapter/*'
+        commit_message: "Auto: Trained on next legal chunk and updated LoRA"
+        file_pattern: 'models/lora_adapter/* data/shards/*'
