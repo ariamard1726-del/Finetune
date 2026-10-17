@@ -24,7 +24,6 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # برگشت به float32 برای سازگاری با CPU گیت‌هاب
     model = AutoModelForCausalLM.from_pretrained(
         config['base_model'], 
         torch_dtype=torch.float32, 
@@ -32,8 +31,6 @@ def main():
         trust_remote_code=True
     )
     model.config.use_cache = False
-
-    # فعال کردن gradient checkpointing برای صرفه‌جویی در رم
     model.gradient_checkpointing_enable()
 
     adapter_path = os.path.abspath("models/lora_adapter")
@@ -44,14 +41,17 @@ def main():
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]
     )
 
+    # 🟢 اصلاح مهم: بررسی دقیق‌تر برای لود کردن فایل لوکال
     if os.path.exists(config_file):
         try:
             print("--- 🔄 Loading previous LoRA weights ---")
-            # اضافه کردن local_files_only برای جلوگیری از خطای Repo id
-            model = PeftModel.from_pretrained(model, adapter_path, is_trainable=True, local_files_only=True)
+            # استفاده از load_adapter به جای from_pretrained برای جلوگیری از خطای Repo id
+            model = get_peft_model(model, peft_config)
+            model.load_adapter(adapter_path, adapter_name="default", is_trainable=True)
+            print("✅ Successfully loaded previous weights.")
         except Exception as e:
             print(f"⚠️ Error loading LoRA ({e}). Starting fresh.")
-            model = get_peft_model(model, peft_config)
+            # اگر خطا داد، مدل از قبل با get_peft_model آماده است
     else:
         print("--- 🌱 Starting fresh LoRA training ---")
         model = get_peft_model(model, peft_config)
@@ -73,9 +73,10 @@ def main():
         save_strategy="no", 
         optim="adamw_torch", 
         fp16=False, 
-        bf16=False,       # خاموش کردن bf16
-        use_cpu=True,     # اجبار به استفاده از CPU
+        bf16=False, 
+        use_cpu=True, 
         report_to="none", 
+        remove_columns=False if hasattr(TrainingArguments, 'remove_columns') else None,
         remove_unused_columns=False
     )
 
@@ -83,7 +84,7 @@ def main():
         model=model, args=training_args, train_dataset=tokenized_datasets, data_collator=data_collator,
     )
 
-    print("--- 🚀 Starting Instruction Tuning (Pure CPU Mode) ---")
+    print("--- 🚀 Starting Instruction Tuning ---")
     trainer.train()
     print("--- 💾 Saving updated LoRA Adapters ---")
     model.save_pretrained(adapter_path)
