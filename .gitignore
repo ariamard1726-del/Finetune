@@ -9,10 +9,16 @@ __pycache__/
 env/
 venv/
 
-# Model weights (دانلود مدل‌های پایه در گیت‌هاب)
+# Model weights (مدل‌های پایه حجیم را نادیده بگیر)
 models/base/
 *.bin
 *.safetensors
+
+# 🟢 استثنا: فایل‌های LoRA حتماً باید آپلود شوند
+!models/lora_adapter/*.bin
+!models/lora_adapter/*.safetensors
+!models/lora_adapter/*.json
+!models/lora_adapter/*.jinja
 
 # Data (داده‌های خام را پوش نکنید، فقط shards)
 data/raw/
