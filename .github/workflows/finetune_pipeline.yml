@@ -40,4 +40,5 @@ jobs:
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: "Auto: Update fine-tuned LoRA weights"
-        file_pattern: 'models/lora_adapter/*.safetensors models/lora_adapter/*.json models/lora_adapter/*.jinja'
+        # تغییر مهم: حالا همه فایل‌های داخل پوشه را پوش می‌کند
+        file_pattern: 'models/lora_adapter/*'
