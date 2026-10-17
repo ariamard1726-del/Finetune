@@ -24,12 +24,18 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    # بهینه‌سازی ۱: استفاده از bfloat16 برای کاهش مصرف رم (نصف شدن حجم مدل در رم)
     model = AutoModelForCausalLM.from_pretrained(
-        config['base_model'], torch_dtype=torch.float32, device_map="cpu", trust_remote_code=True
+        config['base_model'], 
+        torch_dtype=torch.bfloat16, 
+        device_map="cpu", 
+        trust_remote_code=True
     )
     model.config.use_cache = False
 
-    # استفاده از مسیر مطلق برای جلوگیری از خطای گیت‌هاب
+    # بهینه‌سازی ۲: فعال کردن gradient checkpointing برای آزادسازی رم
+    model.gradient_checkpointing_enable()
+
     adapter_path = os.path.abspath("models/lora_adapter")
     config_file = os.path.join(adapter_path, "adapter_config.json")
 
@@ -38,7 +44,6 @@ def main():
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]
     )
 
-    # تلاش برای لود مدل قبلی، در صورت خطا، از اول شروع میکنیم
     if os.path.exists(config_file):
         try:
             print("--- 🔄 Loading previous LoRA weights ---")
@@ -52,7 +57,8 @@ def main():
 
     dataset = load_dataset("json", data_files=current_chunk, split="train")
     def tokenize_function(examples):
-        return tokenizer(examples["text"], truncation=True, max_length=config['max_length'], padding="max_length")
+        # طول متن را به 256 کاهش دادیم تا رم کمتری مصرف شود
+        return tokenizer(examples["text"], truncation=True, max_length=256, padding="max_length")
     
     tokenized_datasets = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -65,14 +71,18 @@ def main():
         num_train_epochs=1, 
         logging_steps=10, 
         save_strategy="no", 
-        optim="adamw_torch", fp16=False, report_to="none", remove_unused_columns=False
+        optim="adamw_torch", 
+        fp16=False, 
+        bf16=True, # فعال کردن bfloat16 در تنظیمات
+        report_to="none", 
+        remove_unused_columns=False
     )
 
     trainer = Trainer(
         model=model, args=training_args, train_dataset=tokenized_datasets, data_collator=data_collator,
     )
 
-    print("--- 🚀 Starting Instruction Tuning ---")
+    print("--- 🚀 Starting Instruction Tuning (Optimized for Memory) ---")
     trainer.train()
     print("--- 💾 Saving updated LoRA Adapters ---")
     model.save_pretrained(adapter_path)
