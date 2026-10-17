@@ -12,7 +12,6 @@ from peft import LoraConfig, get_peft_model, TaskType, PeftModel
 def main():
     config = yaml.safe_load(open("config/training_config.yaml", "r"))
     
-    # پیدا کردن فایل‌های chunk به ترتیب
     chunk_files = sorted(glob.glob("data/shards/legal_chunk_*.jsonl"), key=lambda x: int(x.split('_')[-1].split('.')[0]))
     if not chunk_files:
         print("⚠️ No chunk files found. Exiting.")
@@ -30,17 +29,25 @@ def main():
     )
     model.config.use_cache = False
 
-    adapter_path = "./models/lora_adapter"
-    # اگر از قبل مدلی آموزش دیده بود، آن را لود کن (ادامه آموزش)
-    if os.path.exists(os.path.join(adapter_path, "adapter_config.json")):
-        print("--- 🔄 Loading previous LoRA weights to continue training ---")
-        model = PeftModel.from_pretrained(model, adapter_path, is_trainable=True)
+    # استفاده از مسیر مطلق برای جلوگیری از خطای گیت‌هاب
+    adapter_path = os.path.abspath("models/lora_adapter")
+    config_file = os.path.join(adapter_path, "adapter_config.json")
+
+    peft_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.05,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]
+    )
+
+    # تلاش برای لود مدل قبلی، در صورت خطا، از اول شروع میکنیم
+    if os.path.exists(config_file):
+        try:
+            print("--- 🔄 Loading previous LoRA weights ---")
+            model = PeftModel.from_pretrained(model, adapter_path, is_trainable=True)
+        except Exception as e:
+            print(f"⚠️ Error loading LoRA ({e}). Starting fresh.")
+            model = get_peft_model(model, peft_config)
     else:
         print("--- 🌱 Starting fresh LoRA training ---")
-        peft_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.05,
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]
-        )
         model = get_peft_model(model, peft_config)
 
     dataset = load_dataset("json", data_files=current_chunk, split="train")
@@ -65,7 +72,7 @@ def main():
         model=model, args=training_args, train_dataset=tokenized_datasets, data_collator=data_collator,
     )
 
-    print("--- 🚀 Starting Training ---")
+    print("--- 🚀 Starting Instruction Tuning ---")
     trainer.train()
     print("--- 💾 Saving updated LoRA Adapters ---")
     model.save_pretrained(adapter_path)
