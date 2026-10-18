@@ -1,23 +1,26 @@
 # مدل پایه فارسی
 base_model: "alphaedge-ai/Qwen3-1.7B-fas-32768"
 
-# طول توکن (دیگر پدینگ تا سقف نمی‌شود؛ فقط داخل batch)
-max_length: 768
+# رأی‌ها بلندند؛ نمونه‌های بلندتر از این سقف کنار گذاشته می‌شوند
+max_length: 1024
 
 per_device_batch_size: 1
 gradient_accumulation: 8
 
-# برای LoRA مقدار 2e-5 خیلی کم بود
+# برای LoRA مقدار مناسب
 learning_rate: 1.0e-4
 epochs: 1
 
-# سقف گام برای هر اجرا (جلوگیری از timeout)
+# سقف گام در هر اجرا (جلوگیری از timeout)
 max_steps_per_chunk: 12
+
+# سقف زمان آموزش به دقیقه؛ بعد از آن آموزش متوقف و adapter ذخیره می‌شود
+max_minutes: 270
 
 lora_r: 16
 lora_alpha: 32
 lora_dropout: 0.05
 
-# خروجی
 adapter_path: "models/lora_adapter"
 val_file: "data/val.jsonl"
+val_samples: 10
