@@ -37,7 +37,7 @@ def main():
 
     adapter_path = "models/lora_adapter" 
     
-    # 🟢 بررسی دقیق: آیا فایل وزن اصلی (safetensors یا bin) وجود دارد؟
+    # بررسی وجود وزن‌ها
     weights_exist = os.path.exists(os.path.join(adapter_path, "adapter_model.safetensors")) or \
                     os.path.exists(os.path.join(adapter_path, "adapter_model.bin"))
 
@@ -50,28 +50,45 @@ def main():
         try:
             print("--- 🔄 Loading previous LoRA weights ---")
             model = PeftModel.from_pretrained(model, adapter_path, is_trainable=True, local_files_only=True)
-            print("✅ Successfully loaded previous weights.")
         except Exception as e:
-            print(f"❌ CRITICAL ERROR loading LoRA: {e}")
-            sys.exit(1) # توقف کامل
+            print(f"❌ ERROR: {e}")
+            sys.exit(1)
     else:
-        # اگر فایل وزن نبود (حتی اگر کانفیگ بود)، از نو شروع میکنیم
-        print("--- 🌱 Starting fresh LoRA training (No valid weights found) ---")
+        print("--- 🌱 Starting fresh LoRA training ---")
         model = get_peft_model(model, peft_config)
 
     dataset = load_dataset("json", data_files=current_chunk, split="train")
+    
+    # 🟢 تابع توکنایز با ماسک کردن پرامپت (Loss Masking)
     def tokenize_function(examples):
-        return tokenizer(examples["text"], truncation=True, max_length=256, padding="max_length")
+        tokenized = tokenizer(examples["text"], truncation=True, max_length=512, padding="max_length")
+        labels = []
+        for i, input_ids in enumerate(tokenized["input_ids"]):
+            # پیدا کردن محل شروع پاسخ مدل
+            text = examples["text"][i]
+            if "<|im_start|>assistant\n" in text:
+                # محاسبه تقریبی طول پرامپت
+                prompt_text = text.split("<|im_start|>assistant\n")[0] + "<|im_start|>assistant\n"
+                prompt_len = len(tokenizer(prompt_text)["input_ids"]) - 1
+                label = [-100] * prompt_len + input_ids[prompt_len:]
+            else:
+                label = input_ids
+            labels.append(label)
+        tokenized["labels"] = labels
+        return tokenized
     
     tokenized_datasets = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
+
+    # استفاده از DataCollatorForLanguageModeling برای CausalLM
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
+    # 🟢 کاهش نرخ یادگیری به 2e-5 (امن برای جلوگیری از فراموشی)
     training_args = TrainingArguments(
         output_dir=adapter_path,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=4, 
-        learning_rate=float(config['learning_rate']),
-        num_train_epochs=1, 
+        learning_rate=2e-5, # تغییر مهم!
+        num_train_epochs=2, # دو دور برای یادگیری بهتر
         logging_steps=10, 
         save_strategy="steps",      
         save_steps=50,              
@@ -95,7 +112,6 @@ def main():
     model.save_pretrained(adapter_path)
     tokenizer.save_pretrained(adapter_path)
     
-    # پاک کردن چک‌پوینت‌ها
     for item in os.listdir(adapter_path):
         if item.startswith("checkpoint"):
             shutil.rmtree(os.path.join(adapter_path, item))
