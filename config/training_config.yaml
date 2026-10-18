@@ -1,9 +1,23 @@
-# مدل هرس شده و مخصوص زبان فارسی
+# مدل پایه فارسی
 base_model: "alphaedge-ai/Qwen3-1.7B-fas-32768"
 
-# تنظیمات مخصوص گوشی و گیت‌هاب (مصرف رم پایین)
-max_length: 512
-batch_size: 1
+# طول توکن (دیگر پدینگ تا سقف نمی‌شود؛ فقط داخل batch)
+max_length: 768
+
+per_device_batch_size: 1
 gradient_accumulation: 8
-learning_rate: 2e-4
-epochs: 3
+
+# برای LoRA مقدار 2e-5 خیلی کم بود
+learning_rate: 1.0e-4
+epochs: 1
+
+# سقف گام برای هر اجرا (جلوگیری از timeout)
+max_steps_per_chunk: 12
+
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+
+# خروجی
+adapter_path: "models/lora_adapter"
+val_file: "data/val.jsonl"
