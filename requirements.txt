@@ -1,9 +1,7 @@
-torch
-transformers
-datasets
-peft
-accelerate
+transformers>=4.51,<5
+datasets>=2.19
+peft>=0.12
+accelerate>=0.30
 pyyaml
-bitsandbytes
 sentencepiece
 huggingface_hub

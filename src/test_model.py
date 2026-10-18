@@ -1,66 +1,93 @@
 import os
+
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+BASE = "alphaedge-ai/Qwen3-1.7B-fas-32768"
+ADAPTER = "models/lora_adapter"
+SYSTEM = (
+    "تو یک دستیار حقوقی فارسی‌زبان هستی. فقط بر اساس متن و مواد قانونی "
+    "که در اختیارت قرار می‌گیرد پاسخ بده و اگر اطلاعات کافی نیست، صریح بگو."
+)
+
+QUESTIONS = [
+    "اگر قرارداد شفاهی باشد، آیا در دادگاه قابل پیگیری است؟",
+    "تفاوت اصلی بین عقد جایز و عقد لازم در قانون مدنی چیست؟",
+    "وقایع: خواهان مدعی است مبلغ 500 میلیون ریال به خوانده قرض داده و خوانده پس نداده است.\n\n"
+    "بر اساس این وقایع، استدلال و رأی دادگاه را بنویس.",
+]
+
+
+def build_prompt(tokenizer, messages):
+    if getattr(tokenizer, "chat_template", None):
+        return tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+    parts = [f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n" for m in messages]
+    return "".join(parts) + "<|im_start|>assistant\n"
+
+
+def stop_ids(tok):
+    ids = []
+    if tok.eos_token_id is not None:
+        ids.append(tok.eos_token_id)
+    t = tok.convert_tokens_to_ids("<|im_end|>")
+    if isinstance(t, int) and t >= 0 and t != tok.unk_token_id and t not in ids:
+        ids.append(t)
+    return ids
+
+
+def generate(model, tok, user, max_new_tokens=120):
+    prompt = build_prompt(
+        tok, [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+    )
+    inputs = tok(prompt, return_tensors="pt", add_special_tokens=False)
+    with torch.no_grad():
+        out = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            repetition_penalty=1.1,
+            eos_token_id=stop_ids(tok),
+            pad_token_id=tok.pad_token_id,
+        )
+    return tok.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+
 
 def main():
-    base_model_name = "alphaedge-ai/Qwen3-1.7B-fas-32768"
-    # 🟢 استفاده از مسیر نسبی به جای مسیر مطلق برای رفع باگ
-    adapter_path = "models/lora_adapter"
-    
-    print(f"--- Loading Base Model: {base_model_name} ---")
-    tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
+    print(f"--- Loading base model: {BASE} ---", flush=True)
+    tok = AutoTokenizer.from_pretrained(BASE)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
     model = AutoModelForCausalLM.from_pretrained(
-        base_model_name, 
-        torch_dtype=torch.float32, 
-        device_map="cpu", 
-        trust_remote_code=True
+        BASE, torch_dtype=torch.float32, device_map="cpu"
     )
 
-    # بررسی وجود آداپتور
-    if os.path.exists(os.path.join(adapter_path, "adapter_config.json")):
-        print("--- Loading LoRA Adapter ---")
-        try:
-            # استفاده از مسیر نسبی
-            model = PeftModel.from_pretrained(model, adapter_path, local_files_only=True)
-            print("✅ Adapter loaded successfully.")
-        except Exception as e:
-            print(f"⚠️ Error loading adapter: {e}")
-            print("Testing base model only.")
+    has_adapter = os.path.exists(os.path.join(ADAPTER, "adapter_model.safetensors")) or \
+        os.path.exists(os.path.join(ADAPTER, "adapter_model.bin"))
+
+    if has_adapter:
+        model = PeftModel.from_pretrained(model, ADAPTER, local_files_only=True)
+        print("✅ Adapter loaded.", flush=True)
     else:
-        print("⚠️ No adapter found! Testing base model only.")
+        print("⚠️ No adapter found. Testing base model only.", flush=True)
+    model.eval()
 
-    # پرامپت تست
-    system_prompt = "تو یک دستیار حقوقی هستی. به سوال کاربر با استدلال منطقی پاسخ بده."
-    user_prompt = "من یک پرونده در گروه حقوقی دارم. اگر قرارداد شفاهی باشد، آیا قابل پیگیری در دادگاه است؟"
+    for i, q in enumerate(QUESTIONS, 1):
+        print("\n" + "=" * 60)
+        print(f"سؤال {i}:\n{q}")
+        if has_adapter:
+            with model.disable_adapter():
+                print("\n--- مدل پایه ---")
+                print(generate(model, tok, q), flush=True)
+            print("\n--- مدل + adapter ---")
+            print(generate(model, tok, q), flush=True)
+        else:
+            print("\n--- مدل پایه ---")
+            print(generate(model, tok, q), flush=True)
+    print("\n" + "=" * 60)
 
-    # فرمت‌دهی استاندارد Qwen
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
-    ]
-    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    
-    inputs = tokenizer(text, return_tensors="pt").to("cpu")
-
-    print("\n--- Generating Response (Please wait) ---")
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs, 
-            max_new_tokens=200, 
-            temperature=0.7, 
-            do_sample=True,
-            top_p=0.9
-        )
-    
-    response = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-    
-    print("\n================ مدل پاسخ داد ================")
-    print(response)
-    print("==============================================")
 
 if __name__ == "__main__":
     main()

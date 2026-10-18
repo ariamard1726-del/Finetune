@@ -10,6 +10,7 @@ OUTPUT_DIR = "data/shards"
 VAL_FILE = "data/val.jsonl"
 
 CHUNK_RECORDS = 80      # تعداد نمونه آموزشی در هر شارد
+MAX_SHARDS = 30         # سقف تعداد شارد (جلوگیری از سنگین شدن ریپو)
 VAL_RATIO = 0.02
 VAL_MIN = 20
 SEED = 42
@@ -186,6 +187,7 @@ def main():
     random.Random(SEED).shuffle(samples)
     n_val = min(max(VAL_MIN, int(len(samples) * VAL_RATIO)), len(samples) // 10)
     val, train = samples[:n_val], samples[n_val:]
+    train = train[: MAX_SHARDS * CHUNK_RECORDS]
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     for old in glob.glob(os.path.join(OUTPUT_DIR, "legal_chunk_*.jsonl")):

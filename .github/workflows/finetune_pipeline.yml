@@ -1,21 +1,20 @@
 name: Persian Legal LLM Fine-tuning
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'data/shards/**'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: finetune-train
+  cancel-in-progress: false
+
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 350 
-    
+    timeout-minutes: 350
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -29,34 +28,27 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
+
+    - name: Cache base model
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/huggingface
+        key: hf-qwen3-1.7b-fas
 
     - name: Run Training
       env:
-        HF_TOKEN: ${{ secrets.HF_TOKEN }} 
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
         python src/train.py
-        
-    # 🛡️ مرحله جدید: بررسی وجود فایل مدل قبل از حذف داده
-    - name: Verify Model was Saved
-      run: |
-        if [ -f "models/lora_adapter/adapter_model.safetensors" ] || [ -f "models/lora_adapter/adapter_model.bin" ]; then
-          echo "✅ Model file exists. Safe to delete data chunk."
-        else
-          echo "❌ ERROR: Model weights were NOT saved! Aborting to prevent data loss."
-          exit 1
-        fi
 
-    - name: Remove Trained Chunk
+    - name: Verify this run saved a result
       run: |
-        FIRST_CHUNK=$(ls data/shards/legal_chunk_*.jsonl | sort -V | head -n 1)
-        if [ -n "$FIRST_CHUNK" ]; then
-          rm "$FIRST_CHUNK"
-          echo "✅ Deleted trained chunk: $FIRST_CHUNK"
-        fi
-        
+        python src/verify_run.py
+
     - name: Commit and Push Updates
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
-        commit_message: "Auto: Trained on next legal chunk and updated LoRA"
-        file_pattern: 'models/lora_adapter/* data/shards/*'
+        commit_message: "Auto: trained next chunk and updated LoRA"
+        file_pattern: 'models/lora_adapter data/shards data/done'
