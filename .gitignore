@@ -22,3 +22,8 @@ models/base/
 
 # Data (داده‌های خام را پوش نکنید، فقط shards)
 data/raw/
+
+# keep trained adapter in repo
+!models/lora_adapter/
+!models/lora_adapter/*.safetensors
+!models/lora_adapter/*.bin
