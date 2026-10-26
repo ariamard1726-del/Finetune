@@ -28,3 +28,7 @@ data/done/
 data/shards_backup_text_format/
 src/process_local_data.py.old
 outputs/
+
+# Old versions
+data/shards_v1_old/
+data/val_v2.jsonl
