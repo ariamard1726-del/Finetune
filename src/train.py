@@ -109,10 +109,12 @@ def eval_loss(model, items):
     losses = []
     with torch.no_grad():
         for it in items:
-            ids = torch.tensor([it["input_ids"]])
-            labels = torch.tensor([it["labels"]])
+            ids = torch.tensor([it["input_ids"]]).to(model.device)
+            labels = torch.tensor([it["labels"]]).to(model.device)
             out = model(
-                input_ids=ids, attention_mask=torch.ones_like(ids), labels=labels
+                input_ids=ids,
+                attention_mask=torch.ones_like(ids).to(model.device),
+                labels=labels,
             )
             losses.append(out.loss.item())
     return sum(losses) / len(losses) if losses else None
@@ -178,8 +180,11 @@ def main():
             limit=int(cfg.get("val_samples", 10)),
         )
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = torch.bfloat16 if device == "cuda" else torch.float32
+    print(f"🔧 Device: {device} | dtype: {dtype}")
     model = AutoModelForCausalLM.from_pretrained(
-        cfg["base_model"], torch_dtype=torch.float32, device_map="cpu"
+        cfg["base_model"], torch_dtype=dtype, device_map="auto"
     )
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -229,8 +234,8 @@ def main():
         save_strategy="no",
         optim="adamw_torch",
         fp16=False,
-        bf16=False,
-        use_cpu=True,
+        bf16=(device == "cuda"),
+        use_cpu=(device == "cpu"),
         report_to="none",
         remove_unused_columns=False,
         dataloader_num_workers=0,

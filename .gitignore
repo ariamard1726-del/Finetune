@@ -9,32 +9,22 @@ __pycache__/
 env/
 venv/
 
-# Model weights (مدل‌های پایه حجیم را نادیده بگیر)
+# Model weights (مدل‌های پایه حجیم)
 models/base/
 *.bin
 *.safetensors
 
-# 🟢 استثنا: فایل‌های LoRA حتماً باید آپلود شوند
+# Exception: LoRA adapters MUST be committed
 !models/lora_adapter/*.bin
 !models/lora_adapter/*.safetensors
 !models/lora_adapter/*.json
 !models/lora_adapter/*.jinja
 
-# Data (داده‌های خام را پوش نکنید، فقط shards)
+# Data: local only (too large for GitHub)
 data/raw/
-
-# keep trained adapter in repo
-!models/lora_adapter/
-!models/lora_adapter/*.safetensors
-!models/lora_adapter/*.bin
-
-# Shards - too large for GitHub, keep local
 data/shards/
-data/done/
 data/val.jsonl
-models/base/
-
-# Shards - too large for GitHub, keep local
-data/shards/
 data/done/
-models/base/
+data/shards_backup_text_format/
+src/process_local_data.py.old
+outputs/
