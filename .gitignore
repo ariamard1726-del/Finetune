@@ -27,3 +27,14 @@ data/raw/
 !models/lora_adapter/
 !models/lora_adapter/*.safetensors
 !models/lora_adapter/*.bin
+
+# Shards - too large for GitHub, keep local
+data/shards/
+data/done/
+data/val.jsonl
+models/base/
+
+# Shards - too large for GitHub, keep local
+data/shards/
+data/done/
+models/base/
